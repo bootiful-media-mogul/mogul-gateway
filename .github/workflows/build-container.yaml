@@ -39,9 +39,9 @@ jobs:
       - name: Publish Container
         run: |
           APP_NAME=mogul-gateway
-          cd $GITHUB_WORKSPACE
           IMAGE_NAME=us-docker.pkg.dev/${GCLOUD_PROJECT}/mogul-artifact-registry/${APP_NAME}:latest
-          ./mvnw -DskipTests -Pnative native:compile
+          cd $GITHUB_WORKSPACE
+          ./mvnw --batch-mode --no-transfer-progress -DskipTests -Pnative native:compile
           docker build . -f  .github/workflows/Dockerfile  -t $IMAGE_NAME --build-arg APP_NAME=$APP_NAME
           docker push $IMAGE_NAME
 
