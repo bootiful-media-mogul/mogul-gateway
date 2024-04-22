@@ -41,8 +41,7 @@ jobs:
           cd $GITHUB_WORKSPACE
           IMAGE_NAME=us-docker.pkg.dev/${GCLOUD_PROJECT}/mogul-artifact-registry/${APP_NAME}:latest
           ./mvnw -DskipTests -Pnative native:compile 
-          cd $GITHUB_WORKSPACE 
-          docker build . -t $IMAGE_NAME 
+          docker build . -f  .github/workflows/Dockerfile  -t $IMAGE_NAME --build-arg APP_NAME=$APP_NAME 
           docker push $IMAGE_NAME
 
       - name: Invoke Pipeline
