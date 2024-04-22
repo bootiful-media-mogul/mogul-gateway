@@ -2,6 +2,7 @@ package com.joshlong.mogul.gateway;
 
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.boot.SpringApplication;
+import org.springframework.boot.actuate.autoconfigure.security.reactive.EndpointRequest;
 import org.springframework.boot.autoconfigure.SpringBootApplication;
 import org.springframework.boot.context.properties.EnableConfigurationProperties;
 import org.springframework.cloud.gateway.route.RouteLocator;
@@ -36,7 +37,12 @@ public class GatewayApplication {
 	@SuppressWarnings("SpringJavaInjectionPointsAutowiringInspection")
 	SecurityWebFilterChain securityWebFilterChain(ServerHttpSecurity http) {
 		return http//
-			.authorizeExchange((authorize) -> authorize.anyExchange().authenticated())//
+			.authorizeExchange((authorize) -> authorize//
+				.matchers(EndpointRequest.toAnyEndpoint())
+				.permitAll()//
+				.anyExchange()
+				.authenticated()//
+			)//
 			.csrf(ServerHttpSecurity.CsrfSpec::disable)//
 			.oauth2Login(Customizer.withDefaults())//
 			.oauth2Client(Customizer.withDefaults())//
