@@ -33,13 +33,13 @@ public class GatewayApplication {
 			.build();
 	}
 
-	@Bean
+	/*@Bean
 	@SuppressWarnings("SpringJavaInjectionPointsAutowiringInspection")
 	SecurityWebFilterChain securityWebFilterChain(ServerHttpSecurity http) {
 		return http//
 			.authorizeExchange((authorize) -> authorize//
-				.matchers(EndpointRequest.toAnyEndpoint())
-				.permitAll()//
+//				.matchers(EndpointRequest.toAnyEndpoint())
+//				.permitAll()//
 				.anyExchange()
 				.authenticated()//
 			)//
@@ -47,6 +47,6 @@ public class GatewayApplication {
 			.oauth2Login(Customizer.withDefaults())//
 			.oauth2Client(Customizer.withDefaults())//
 			.build();
-	}
+	}*/
 
 }
