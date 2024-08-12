@@ -8,9 +8,16 @@ import org.springframework.boot.context.properties.EnableConfigurationProperties
 import org.springframework.cloud.gateway.route.RouteLocator;
 import org.springframework.cloud.gateway.route.builder.RouteLocatorBuilder;
 import org.springframework.context.annotation.Bean;
+import org.springframework.context.annotation.Configuration;
 import org.springframework.security.config.Customizer;
 import org.springframework.security.config.web.server.ServerHttpSecurity;
+import org.springframework.security.oauth2.client.registration.ReactiveClientRegistrationRepository;
+import org.springframework.security.oauth2.client.web.server.DefaultServerOAuth2AuthorizationRequestResolver;
+import org.springframework.security.oauth2.client.web.server.ServerOAuth2AuthorizationRequestResolver;
+import org.springframework.security.oauth2.core.endpoint.OAuth2AuthorizationRequest;
 import org.springframework.security.web.server.SecurityWebFilterChain;
+
+import java.util.function.Consumer;
 
 @SpringBootApplication
 @EnableConfigurationProperties(GatewayProperties.class)
@@ -35,6 +42,25 @@ public class GatewayApplication {
 			.build();
 	}
 
+}
+
+/**
+ * a useful fix from <a href="https://github.com/okta/okta-spring-boot/issues/596">Matt
+ * Raible</a>
+ */
+@Configuration
+class SecurityConfiguration {
+
+	private final String audience;
+
+	private final ReactiveClientRegistrationRepository clientRegistrationRepository;
+
+	SecurityConfiguration(ReactiveClientRegistrationRepository clientRegistrationRepository,
+			@Value("${auth0.audience}") String audience) {
+		this.clientRegistrationRepository = clientRegistrationRepository;
+		this.audience = audience;
+	}
+
 	@Bean
 	@SuppressWarnings("SpringJavaInjectionPointsAutowiringInspection")
 	SecurityWebFilterChain securityWebFilterChain(ServerHttpSecurity http) {
@@ -45,10 +71,24 @@ public class GatewayApplication {
 				.anyExchange()
 				.authenticated()//
 			)//
+			.oauth2Login(oauth2 -> oauth2
+				.authorizationRequestResolver(authorizationRequestResolver(this.clientRegistrationRepository)))
 			.csrf(ServerHttpSecurity.CsrfSpec::disable)//
 			.oauth2Login(Customizer.withDefaults())//
 			.oauth2Client(Customizer.withDefaults())//
 			.build();
+	}
+
+	private ServerOAuth2AuthorizationRequestResolver authorizationRequestResolver(
+			ReactiveClientRegistrationRepository clientRegistrationRepository) {
+		var authorizationRequestResolver = new DefaultServerOAuth2AuthorizationRequestResolver(
+				clientRegistrationRepository);
+		authorizationRequestResolver.setAuthorizationRequestCustomizer(authorizationRequestCustomizer());
+		return authorizationRequestResolver;
+	}
+
+	private Consumer<OAuth2AuthorizationRequest.Builder> authorizationRequestCustomizer() {
+		return customizer -> customizer.additionalParameters(params -> params.put("audience", audience));
 	}
 
 }
