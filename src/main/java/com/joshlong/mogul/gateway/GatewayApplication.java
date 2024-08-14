@@ -72,7 +72,7 @@ class SecurityConfiguration {
 				.authenticated()//
 			)//
 			.oauth2Login(oauth2 -> oauth2
-				.authorizationRequestResolver(authorizationRequestResolver(this.clientRegistrationRepository)))
+				.authorizationRequestResolver(this.authorizationRequestResolver(this.clientRegistrationRepository)))
 			.csrf(ServerHttpSecurity.CsrfSpec::disable)//
 			.oauth2Login(Customizer.withDefaults())//
 			.oauth2Client(Customizer.withDefaults())//
@@ -83,12 +83,9 @@ class SecurityConfiguration {
 			ReactiveClientRegistrationRepository clientRegistrationRepository) {
 		var authorizationRequestResolver = new DefaultServerOAuth2AuthorizationRequestResolver(
 				clientRegistrationRepository);
-		authorizationRequestResolver.setAuthorizationRequestCustomizer(authorizationRequestCustomizer());
+		authorizationRequestResolver.setAuthorizationRequestCustomizer(
+				customizer -> customizer.additionalParameters(params -> params.put("audience", audience)));
 		return authorizationRequestResolver;
-	}
-
-	private Consumer<OAuth2AuthorizationRequest.Builder> authorizationRequestCustomizer() {
-		return customizer -> customizer.additionalParameters(params -> params.put("audience", audience));
 	}
 
 }
