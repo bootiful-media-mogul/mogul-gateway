@@ -36,7 +36,10 @@ public class GatewayApplication {
 		return rlb//
 			.routes()
 			.route(rs -> rs.path(apiPrefix + "**")
-				.filters(f -> f.tokenRelay().rewritePath(apiPrefix + "(?<segment>.*)", "/$\\{segment}"))
+				.filters(f -> f.tokenRelay() //
+					.retry(5) //
+					.rewritePath(apiPrefix + "(?<segment>.*)", "/$\\{segment}")//
+				)
 				.uri(api))
 			.route(rs -> rs.path("/**").uri(ui))
 			.build();
