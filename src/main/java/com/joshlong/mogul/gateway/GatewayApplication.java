@@ -14,10 +14,7 @@ import org.springframework.security.config.web.server.ServerHttpSecurity;
 import org.springframework.security.oauth2.client.registration.ReactiveClientRegistrationRepository;
 import org.springframework.security.oauth2.client.web.server.DefaultServerOAuth2AuthorizationRequestResolver;
 import org.springframework.security.oauth2.client.web.server.ServerOAuth2AuthorizationRequestResolver;
-import org.springframework.security.oauth2.core.endpoint.OAuth2AuthorizationRequest;
 import org.springframework.security.web.server.SecurityWebFilterChain;
-
-import java.util.function.Consumer;
 
 @SpringBootApplication
 @EnableConfigurationProperties(GatewayProperties.class)
@@ -33,15 +30,17 @@ public class GatewayApplication {
 	RouteLocator gateway(RouteLocatorBuilder rlb, @Value("${mogul.gateway.ui}") String ui,
 			@Value("${mogul.gateway.api}") String api) {
 		var apiPrefix = "/api/";
+		var retries = 5;
 		return rlb//
 			.routes()
 			.route(rs -> rs.path(apiPrefix + "**")
-				.filters(f -> f.tokenRelay() //
-					.retry(5) //
+				.filters(f -> f //
+					.tokenRelay() //
+					.retry(retries) //
 					.rewritePath(apiPrefix + "(?<segment>.*)", "/$\\{segment}")//
 				)
 				.uri(api))
-			.route(rs -> rs.path("/**").uri(ui))
+			.route(rs -> rs.path("/**").filters(f -> f.retry(retries)).uri(ui))
 			.build();
 	}
 
