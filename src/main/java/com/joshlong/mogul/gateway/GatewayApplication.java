@@ -25,14 +25,6 @@ public class GatewayApplication {
 			System.getenv().forEach((k, v) -> System.out.println(k + "=" + v));
 		SpringApplication.run(GatewayApplication.class, args);
 	}
-	/*
-	 *
-	 * @Bean TokenEnrichingTokenRelayGatewayFilter
-	 * tokenEnrichingTokenRelayGatewayFilter(ObjectMapper objectMapper,
-	 * ReactiveOAuth2AuthorizedClientManager auth2AuthorizedClientManager) { return new
-	 * TokenEnrichingTokenRelayGatewayFilter(auth2AuthorizedClientManager, objectMapper);
-	 * }
-	 */
 
 	@Bean
 	RouteLocator gateway(RouteLocatorBuilder rlb, @Value("${mogul.gateway.ui}") String ui,
