@@ -1,37 +1,20 @@
 package com.joshlong.mogul.gateway;
 
-import com.fasterxml.jackson.databind.ObjectMapper;
-import org.slf4j.Logger;
-import org.slf4j.LoggerFactory;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.boot.SpringApplication;
 import org.springframework.boot.actuate.autoconfigure.security.reactive.EndpointRequest;
 import org.springframework.boot.autoconfigure.SpringBootApplication;
 import org.springframework.boot.context.properties.EnableConfigurationProperties;
-import org.springframework.cloud.gateway.filter.GatewayFilter;
-import org.springframework.cloud.gateway.filter.GatewayFilterChain;
 import org.springframework.cloud.gateway.route.RouteLocator;
 import org.springframework.cloud.gateway.route.builder.RouteLocatorBuilder;
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
 import org.springframework.security.config.Customizer;
 import org.springframework.security.config.web.server.ServerHttpSecurity;
-import org.springframework.security.oauth2.client.OAuth2AuthorizeRequest;
-import org.springframework.security.oauth2.client.OAuth2AuthorizedClient;
-import org.springframework.security.oauth2.client.ReactiveOAuth2AuthorizedClientManager;
-import org.springframework.security.oauth2.client.authentication.OAuth2AuthenticationToken;
 import org.springframework.security.oauth2.client.registration.ReactiveClientRegistrationRepository;
 import org.springframework.security.oauth2.client.web.server.DefaultServerOAuth2AuthorizationRequestResolver;
 import org.springframework.security.oauth2.client.web.server.ServerOAuth2AuthorizationRequestResolver;
 import org.springframework.security.web.server.SecurityWebFilterChain;
-import org.springframework.util.Assert;
-import org.springframework.web.server.ServerWebExchange;
-import reactor.core.publisher.Mono;
-
-import java.util.HashMap;
-import java.util.Map;
-import java.util.Set;
-import java.util.stream.Collectors;
 
 @SpringBootApplication
 @EnableConfigurationProperties(GatewayProperties.class)
@@ -42,16 +25,17 @@ public class GatewayApplication {
 			System.getenv().forEach((k, v) -> System.out.println(k + "=" + v));
 		SpringApplication.run(GatewayApplication.class, args);
 	}
+	/*
+	 *
+	 * @Bean TokenEnrichingTokenRelayGatewayFilter
+	 * tokenEnrichingTokenRelayGatewayFilter(ObjectMapper objectMapper,
+	 * ReactiveOAuth2AuthorizedClientManager auth2AuthorizedClientManager) { return new
+	 * TokenEnrichingTokenRelayGatewayFilter(auth2AuthorizedClientManager, objectMapper);
+	 * }
+	 */
 
 	@Bean
-	TokenEnrichingTokenRelayGatewayFilter tokenEnrichingTokenRelayGatewayFilter(ObjectMapper objectMapper,
-			ReactiveOAuth2AuthorizedClientManager auth2AuthorizedClientManager) {
-		return new TokenEnrichingTokenRelayGatewayFilter(auth2AuthorizedClientManager, objectMapper);
-	}
-
-	@Bean
-	RouteLocator gateway(TokenEnrichingTokenRelayGatewayFilter tokenEnrichingTokenRelayGatewayFilter,
-			RouteLocatorBuilder rlb, @Value("${mogul.gateway.ui}") String ui,
+	RouteLocator gateway(RouteLocatorBuilder rlb, @Value("${mogul.gateway.ui}") String ui,
 			@Value("${mogul.gateway.api}") String api) {
 		var apiPrefix = "/api/";
 		var retries = 5;
@@ -59,7 +43,7 @@ public class GatewayApplication {
 			.routes()
 			.route(rs -> rs.path(apiPrefix + "**")
 				.filters(f -> f //
-					.filter(tokenEnrichingTokenRelayGatewayFilter) //
+					.tokenRelay()
 					.retry(retries) //
 					.rewritePath(apiPrefix + "(?<segment>.*)", "/$\\{segment}")//
 				)
@@ -69,66 +53,47 @@ public class GatewayApplication {
 	}
 
 }
-
-class TokenEnrichingTokenRelayGatewayFilter implements GatewayFilter {
-
-	private final Logger log = LoggerFactory.getLogger(getClass());
-
-	private final ReactiveOAuth2AuthorizedClientManager clientManager;
-
-	private final ObjectMapper objectMapper;
-
-	TokenEnrichingTokenRelayGatewayFilter(ReactiveOAuth2AuthorizedClientManager clientManager,
-			ObjectMapper objectMapper) {
-		this.clientManager = clientManager;
-		this.objectMapper = objectMapper;
-	}
-
-	private String json(Object o) {
-		try {
-			return this.objectMapper.writeValueAsString(o);
-		} //
-		catch (Throwable throwable) {
-			throw new RuntimeException(throwable);
-		}
-	}
-
-	@Override
-	public Mono<Void> filter(ServerWebExchange exchange, GatewayFilterChain chain) {
-		return exchange.getPrincipal().flatMap(principal -> {
-			if (principal instanceof OAuth2AuthenticationToken authentication) {
-				var clientRegistrationId = authentication.getAuthorizedClientRegistrationId();
-				var auth2AuthorizeRequest = OAuth2AuthorizeRequest.withClientRegistrationId(clientRegistrationId)
-					.principal(authentication)
-					.build();
-				var map = new HashMap<String, Object>();
-				if (auth2AuthorizeRequest.getPrincipal() instanceof OAuth2AuthenticationToken token) {
-					var fullProfile = token.getPrincipal().getAttributes();
-					var desired = Set.of("given_name", "picture", "email", "family_name");
-					var desiredMapToSendOnward = fullProfile.entrySet()
-						.stream()
-						.filter(entry -> desired.contains(entry.getKey()) && entry.getValue() != null)
-						.collect(Collectors.toMap(Map.Entry::getKey, Map.Entry::getValue));
-					map.putAll(desiredMapToSendOnward);
-				}
-				else
-					Assert.state(false, "the principal must be an OAuth2AuthenticationToken.");
-
-				return clientManager.authorize(auth2AuthorizeRequest)
-					.map(OAuth2AuthorizedClient::getAccessToken)
-					.map(token -> exchange.mutate().request(r -> r.headers(h -> {
-						h.setBearerAuth(token.getTokenValue());
-						h.add("X-Auth-Details", json(map));
-					})
-
-					).build());
-			}
-			return Mono.empty();
-
-		}).defaultIfEmpty(exchange).flatMap(chain::filter);
-	}
-
-}
+/*
+ * class TokenEnrichingTokenRelayGatewayFilter implements GatewayFilter {
+ *
+ * private final Logger log = LoggerFactory.getLogger(getClass());
+ *
+ * private final ReactiveOAuth2AuthorizedClientManager clientManager;
+ *
+ * private final ObjectMapper objectMapper;
+ *
+ * TokenEnrichingTokenRelayGatewayFilter(ReactiveOAuth2AuthorizedClientManager
+ * clientManager, ObjectMapper objectMapper) { this.clientManager = clientManager;
+ * this.objectMapper = objectMapper; }
+ *
+ * private String json(Object o) { try { return this.objectMapper.writeValueAsString(o); }
+ * // catch (Throwable throwable) { throw new RuntimeException(throwable); } }
+ *
+ * @Override public Mono<Void> filter(ServerWebExchange exchange, GatewayFilterChain
+ * chain) { return exchange.getPrincipal().flatMap(principal -> { if (principal instanceof
+ * OAuth2AuthenticationToken authentication) { var clientRegistrationId =
+ * authentication.getAuthorizedClientRegistrationId(); var auth2AuthorizeRequest =
+ * OAuth2AuthorizeRequest.withClientRegistrationId(clientRegistrationId)
+ * .principal(authentication) .build(); var map = new HashMap<String, Object>(); if
+ * (auth2AuthorizeRequest.getPrincipal() instanceof OAuth2AuthenticationToken token) { var
+ * fullProfile = token.getPrincipal().getAttributes(); var desired = Set.of("given_name",
+ * "picture", "email", "family_name"); var desiredMapToSendOnward = fullProfile.entrySet()
+ * .stream() .filter(entry -> desired.contains(entry.getKey()) && entry.getValue() !=
+ * null) .collect(Collectors.toMap(Map.Entry::getKey, Map.Entry::getValue));
+ * map.putAll(desiredMapToSendOnward); } else Assert.state(false,
+ * "the principal must be an OAuth2AuthenticationToken.");
+ *
+ * return clientManager.authorize(auth2AuthorizeRequest)
+ * .map(OAuth2AuthorizedClient::getAccessToken) .map(token -> exchange.mutate().request(r
+ * -> r.headers(h -> { h.setBearerAuth(token.getTokenValue()); h.add("X-Auth-Details",
+ * json(map)); })
+ *
+ * ).build()); } return Mono.empty();
+ *
+ * }).defaultIfEmpty(exchange).flatMap(chain::filter); }
+ *
+ * }
+ */
 
 /**
  * a useful fix from <a href="https://github.com/okta/okta-spring-boot/issues/596">Matt
