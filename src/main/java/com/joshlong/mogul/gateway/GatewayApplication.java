@@ -51,7 +51,8 @@ public class GatewayApplication {
 				)
 				.uri(api) //
 			)//
-			.route(rs -> rs.path("/**") //
+			.route(rs -> rs//
+				.path("/**") //
 				.filters(f -> f.retry(retries)) //
 				.uri(ui) //
 			) //
