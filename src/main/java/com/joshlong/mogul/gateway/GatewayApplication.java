@@ -29,8 +29,8 @@ import reactor.core.publisher.Mono;
 public class GatewayApplication {
 
 	public static void main(String[] args) {
-		if (System.getenv("DEBUG") != null && System.getenv("DEBUG").equals("true"))
-			System.getenv().forEach((k, v) -> System.out.println(k + "=" + v));
+		// if (System.getenv("DEBUG") != null && System.getenv("DEBUG").equals("true"))
+		// System.getenv().forEach((k, v) -> System.out.println(k + "=" + v));
 		SpringApplication.run(GatewayApplication.class, args);
 	}
 
