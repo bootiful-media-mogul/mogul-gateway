@@ -4,6 +4,7 @@ import org.springframework.beans.factory.annotation.Value;
 import org.springframework.boot.SpringApplication;
 import org.springframework.boot.actuate.autoconfigure.security.reactive.EndpointRequest;
 import org.springframework.boot.autoconfigure.SpringBootApplication;
+import org.springframework.boot.context.properties.ConfigurationProperties;
 import org.springframework.boot.context.properties.EnableConfigurationProperties;
 import org.springframework.cloud.gateway.filter.GatewayFilter;
 import org.springframework.cloud.gateway.filter.GatewayFilterChain;
@@ -23,6 +24,8 @@ import org.springframework.security.oauth2.client.web.server.ServerOAuth2Authori
 import org.springframework.security.web.server.SecurityWebFilterChain;
 import org.springframework.web.server.ServerWebExchange;
 import reactor.core.publisher.Mono;
+
+import java.net.URI;
 
 @SpringBootApplication
 @EnableConfigurationProperties(GatewayProperties.class)
@@ -97,6 +100,10 @@ class TokenEnrichingTokenRelayGatewayFilter implements GatewayFilter {
 			.flatMap(chain::filter);
 	}
 
+}
+
+@ConfigurationProperties(prefix = "mogul.gateway")
+record GatewayProperties(String apiPrefix, URI api, String uiPrefix, URI ui) {
 }
 
 /**
