@@ -21,6 +21,7 @@ import org.springframework.security.oauth2.client.authentication.OAuth2Authentic
 import org.springframework.security.oauth2.client.registration.ReactiveClientRegistrationRepository;
 import org.springframework.security.oauth2.client.web.server.DefaultServerOAuth2AuthorizationRequestResolver;
 import org.springframework.security.oauth2.client.web.server.ServerOAuth2AuthorizationRequestResolver;
+import org.springframework.security.oauth2.core.AbstractOAuth2Token;
 import org.springframework.security.web.server.SecurityWebFilterChain;
 import org.springframework.web.server.ServerWebExchange;
 import reactor.core.publisher.Mono;
@@ -32,18 +33,19 @@ import java.net.URI;
 public class GatewayApplication {
 
 	public static void main(String[] args) {
-		// if (System.getenv("DEBUG") != null && System.getenv("DEBUG").equals("true"))
-		// System.getenv().forEach((k, v) -> System.out.println(k + "=" + v));
 		SpringApplication.run(GatewayApplication.class, args);
 	}
 
 	@Bean
 	RouteLocator gateway(RouteLocatorBuilder rlb, TokenEnrichingTokenRelayGatewayFilter tokenRelay,
 			@Value("${mogul.gateway.ui}") String ui, @Value("${mogul.gateway.api}") String api) {
+		var startupReport = "/startup-report";
 		var apiPrefix = "/api/";
 		var retries = 5;
+
 		return rlb//
 			.routes()
+
 			.route(rs -> rs //
 				.path(apiPrefix + "**") //
 				.filters(f -> f //
@@ -69,6 +71,7 @@ public class GatewayApplication {
 
 }
 
+// todo does retrying the request in this filter fix things?
 class TokenEnrichingTokenRelayGatewayFilter implements GatewayFilter {
 
 	private final ReactiveOAuth2AuthorizedClientManager clientManager;
@@ -84,14 +87,17 @@ class TokenEnrichingTokenRelayGatewayFilter implements GatewayFilter {
 			.flatMap(principal -> { //
 				if (principal instanceof OAuth2AuthenticationToken authentication) {
 					var clientRegistrationId = authentication.getAuthorizedClientRegistrationId();
-					var auth2AuthorizeRequest = OAuth2AuthorizeRequest.withClientRegistrationId(clientRegistrationId)
-						.principal(authentication)
+					var auth2AuthorizeRequest = OAuth2AuthorizeRequest//
+						.withClientRegistrationId(clientRegistrationId)//
+						.principal(authentication)//
 						.build();
-					return clientManager.authorize(auth2AuthorizeRequest)
-						.map(OAuth2AuthorizedClient::getAccessToken)
-						.map(token -> exchange.mutate()
-							.request(r -> r.headers(h -> h.setBearerAuth(token.getTokenValue())))
-							.build());
+					var tokenMono = clientManager.authorize(auth2AuthorizeRequest)//
+						.map(OAuth2AuthorizedClient::getAccessToken)//
+						.map(AbstractOAuth2Token::getTokenValue);
+					return tokenMono
+						.map(token -> exchange.mutate().request(r -> r.headers(h -> h.setBearerAuth(token))).build())
+						.retry(3);
+
 				}
 				return Mono.empty();
 
