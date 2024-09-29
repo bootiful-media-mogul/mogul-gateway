@@ -39,13 +39,11 @@ public class GatewayApplication {
 	@Bean
 	RouteLocator gateway(RouteLocatorBuilder rlb, TokenEnrichingTokenRelayGatewayFilter tokenRelay,
 			@Value("${mogul.gateway.ui}") String ui, @Value("${mogul.gateway.api}") String api) {
-		var startupReport = "/startup-report";
 		var apiPrefix = "/api/";
 		var retries = 5;
 
 		return rlb//
 			.routes()
-
 			.route(rs -> rs //
 				.path(apiPrefix + "**") //
 				.filters(f -> f //
