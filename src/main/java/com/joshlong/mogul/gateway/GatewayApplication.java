@@ -89,7 +89,8 @@ class TokenEnrichingTokenRelayGatewayFilter implements GatewayFilter {
 						.withClientRegistrationId(clientRegistrationId)//
 						.principal(authentication)//
 						.build();
-					var tokenMono = clientManager.authorize(auth2AuthorizeRequest)//
+					var tokenMono = clientManager//
+						.authorize(auth2AuthorizeRequest)//
 						.map(OAuth2AuthorizedClient::getAccessToken)//
 						.map(AbstractOAuth2Token::getTokenValue);
 					return tokenMono
