@@ -130,12 +130,14 @@ class SecurityConfiguration {
 
 	@Bean
 	@SuppressWarnings("SpringJavaInjectionPointsAutowiringInspection")
-	SecurityWebFilterChain securityWebFilterChain(ServerHttpSecurity http) {
+	SecurityWebFilterChain securityWebFilterChain(GatewayProperties properties, ServerHttpSecurity http) {
+
+		var apiPrefix = properties.apiPrefix().endsWith("/") ? properties.apiPrefix() : properties.apiPrefix() + "/";
 		return http//
 			.authorizeExchange((authorize) -> authorize//
 				.matchers(EndpointRequest.toAnyEndpoint())
 				.permitAll()//
-				.pathMatchers("/feeds/*")
+				.pathMatchers(apiPrefix + "feeds/*")
 				.permitAll()
 				.anyExchange()
 				.authenticated()//
