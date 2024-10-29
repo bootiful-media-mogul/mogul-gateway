@@ -135,6 +135,8 @@ class SecurityConfiguration {
 			.authorizeExchange((authorize) -> authorize//
 				.matchers(EndpointRequest.toAnyEndpoint())
 				.permitAll()//
+				.pathMatchers("/feeds/*")
+				.permitAll()
 				.anyExchange()
 				.authenticated()//
 			)//
