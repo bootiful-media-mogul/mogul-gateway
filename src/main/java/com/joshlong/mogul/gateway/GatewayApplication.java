@@ -25,7 +25,6 @@ import org.springframework.security.oauth2.client.web.server.DefaultServerOAuth2
 import org.springframework.security.oauth2.client.web.server.ServerOAuth2AuthorizationRequestResolver;
 import org.springframework.security.oauth2.core.AbstractOAuth2Token;
 import org.springframework.security.web.server.SecurityWebFilterChain;
-import org.springframework.security.web.server.util.matcher.ServerWebExchangeMatcher;
 import org.springframework.web.server.ServerWebExchange;
 import reactor.core.publisher.Mono;
 
@@ -60,6 +59,7 @@ public class GatewayApplication {
 				.path("/**") //
 				.filters(f -> f.retry(retries)) //
 				.uri(ui) //
+
 			) //
 			.build();
 	}
@@ -135,23 +135,11 @@ class SecurityConfiguration {
 
 	@Bean
 	@SuppressWarnings("SpringJavaInjectionPointsAutowiringInspection")
-	SecurityWebFilterChain securityWebFilterChain(GatewayProperties properties, ServerHttpSecurity http) {
-
-		var apiPrefix = properties.apiPrefix().endsWith("/") ? properties.apiPrefix() : properties.apiPrefix() + "/";
-		var publicPrefix = apiPrefix + "public";
-		System.out.println("PUBLIC:" + publicPrefix);
+	SecurityWebFilterChain securityWebFilterChain(ServerHttpSecurity http) {
 		return http//
 			.authorizeExchange((authorize) -> authorize//
 				.matchers(EndpointRequest.toAnyEndpoint())
 				.permitAll()//
-				/*
-				 * .matchers(exchange -> { var path =
-				 * exchange.getRequest().getPath().value(); var startsWith =
-				 * path.startsWith(publicPrefix); log. info ("path: {}", path); var match
-				 * = startsWith ? ServerWebExchangeMatcher.MatchResult.match() :
-				 * ServerWebExchangeMatcher.MatchResult.notMatch(); if (startsWith)
-				 * log.info ("found match: {}", match); return match; })// .permitAll()//
-				 */
 				.anyExchange()
 				.authenticated()//
 			)//
