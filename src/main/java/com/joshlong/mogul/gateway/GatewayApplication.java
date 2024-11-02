@@ -1,5 +1,7 @@
 package com.joshlong.mogul.gateway;
 
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.boot.SpringApplication;
 import org.springframework.boot.actuate.autoconfigure.security.reactive.EndpointRequest;
@@ -23,6 +25,7 @@ import org.springframework.security.oauth2.client.web.server.DefaultServerOAuth2
 import org.springframework.security.oauth2.client.web.server.ServerOAuth2AuthorizationRequestResolver;
 import org.springframework.security.oauth2.core.AbstractOAuth2Token;
 import org.springframework.security.web.server.SecurityWebFilterChain;
+import org.springframework.security.web.server.util.matcher.ServerWebExchangeMatcher;
 import org.springframework.web.server.ServerWebExchange;
 import reactor.core.publisher.Mono;
 
@@ -118,6 +121,8 @@ record GatewayProperties(String apiPrefix, URI api, String uiPrefix, URI ui) {
 @Configuration
 class SecurityConfiguration {
 
+	private static final Logger log = LoggerFactory.getLogger(SecurityConfiguration.class);
+
 	private final String audience;
 
 	private final ReactiveClientRegistrationRepository clientRegistrationRepository;
@@ -133,12 +138,20 @@ class SecurityConfiguration {
 	SecurityWebFilterChain securityWebFilterChain(GatewayProperties properties, ServerHttpSecurity http) {
 
 		var apiPrefix = properties.apiPrefix().endsWith("/") ? properties.apiPrefix() : properties.apiPrefix() + "/";
+		var publicPrefix = apiPrefix + "public";
+		System.out.println("PUBLIC:" + publicPrefix);
 		return http//
 			.authorizeExchange((authorize) -> authorize//
 				.matchers(EndpointRequest.toAnyEndpoint())
 				.permitAll()//
-				.pathMatchers(apiPrefix + "public/**")
-				.permitAll()
+				/*
+				 * .matchers(exchange -> { var path =
+				 * exchange.getRequest().getPath().value(); var startsWith =
+				 * path.startsWith(publicPrefix); log. info ("path: {}", path); var match
+				 * = startsWith ? ServerWebExchangeMatcher.MatchResult.match() :
+				 * ServerWebExchangeMatcher.MatchResult.notMatch(); if (startsWith)
+				 * log.info ("found match: {}", match); return match; })// .permitAll()//
+				 */
 				.anyExchange()
 				.authenticated()//
 			)//
