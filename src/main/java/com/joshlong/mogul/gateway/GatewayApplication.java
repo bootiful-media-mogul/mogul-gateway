@@ -59,7 +59,6 @@ public class GatewayApplication {
 				.path("/**") //
 				.filters(f -> f.retry(retries)) //
 				.uri(ui) //
-
 			) //
 			.build();
 	}
@@ -120,8 +119,6 @@ record GatewayProperties(String apiPrefix, URI api, String uiPrefix, URI ui) {
  */
 @Configuration
 class SecurityConfiguration {
-
-	private static final Logger log = LoggerFactory.getLogger(SecurityConfiguration.class);
 
 	private final String audience;
 
