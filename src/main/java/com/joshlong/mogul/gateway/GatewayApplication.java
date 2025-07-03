@@ -1,7 +1,5 @@
 package com.joshlong.mogul.gateway;
 
-import org.slf4j.Logger;
-import org.slf4j.LoggerFactory;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.boot.SpringApplication;
 import org.springframework.boot.actuate.autoconfigure.security.reactive.EndpointRequest;
