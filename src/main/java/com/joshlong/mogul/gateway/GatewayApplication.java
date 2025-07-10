@@ -1,5 +1,7 @@
 package com.joshlong.mogul.gateway;
 
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.boot.SpringApplication;
 import org.springframework.boot.actuate.autoconfigure.security.reactive.EndpointRequest;
@@ -8,8 +10,11 @@ import org.springframework.boot.context.properties.ConfigurationProperties;
 import org.springframework.boot.context.properties.EnableConfigurationProperties;
 import org.springframework.cloud.gateway.filter.GatewayFilter;
 import org.springframework.cloud.gateway.filter.GatewayFilterChain;
+import org.springframework.cloud.gateway.filter.factory.RetryGatewayFilterFactory;
 import org.springframework.cloud.gateway.route.RouteLocator;
 import org.springframework.cloud.gateway.route.builder.RouteLocatorBuilder;
+import org.springframework.context.ApplicationEvent;
+import org.springframework.context.ApplicationListener;
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
 import org.springframework.security.config.Customizer;
@@ -23,10 +28,12 @@ import org.springframework.security.oauth2.client.web.server.DefaultServerOAuth2
 import org.springframework.security.oauth2.client.web.server.ServerOAuth2AuthorizationRequestResolver;
 import org.springframework.security.oauth2.core.AbstractOAuth2Token;
 import org.springframework.security.web.server.SecurityWebFilterChain;
+import org.springframework.stereotype.Component;
 import org.springframework.web.server.ServerWebExchange;
 import reactor.core.publisher.Mono;
 
 import java.net.URI;
+import java.util.function.Consumer;
 
 @SpringBootApplication
 @EnableConfigurationProperties(GatewayProperties.class)
@@ -41,21 +48,30 @@ public class GatewayApplication {
 			@Value("${mogul.gateway.ui}") String ui, @Value("${mogul.gateway.api}") String api) {
 		var apiPrefix = "/api/";
 		var retries = 5;
-
+		// var rc= new Consumer<RetryGatewayFilterFactory.RetryConfig>() {
+		//
+		// @Override
+		// public void accept(RetryGatewayFilterFactory.RetryConfig retryConfig) {
+		// retryConfig.ret
+		// }
+		//
+		// };
 		return rlb//
 			.routes()
 			.route(rs -> rs //
 				.path(apiPrefix + "**") //
 				.filters(f -> f //
-					.filter(tokenRelay)
 					.retry(retries) //
+					.filter(tokenRelay)
 					.rewritePath(apiPrefix + "(?<segment>.*)", "/$\\{segment}")//
 				)
 				.uri(api) //
 			)//
+				// todo trying to see if adding the token relay to the ui will allow us to
+				// never render anything without a valid token
 			.route(rs -> rs//
 				.path("/**") //
-				.filters(f -> f.retry(retries)) //
+				.filters(f -> f.retry(retries).filter(tokenRelay)) //
 				.uri(ui) //
 			) //
 			.build();
@@ -153,6 +169,20 @@ class SecurityConfiguration {
 		authorizationRequestResolver.setAuthorizationRequestCustomizer(
 				customizer -> customizer.additionalParameters(params -> params.put("audience", audience)));
 		return authorizationRequestResolver;
+	}
+
+}
+
+@Component
+class Listener implements ApplicationListener {
+
+	private final Logger log = LoggerFactory.getLogger(getClass());
+
+	@Override
+	public void onApplicationEvent(ApplicationEvent event) {
+		if (this.log.isDebugEnabled())
+			this.log.debug("received event [{}]: {} with source {}", event.getClass().getName(), event,
+					event.getSource());
 	}
 
 }
