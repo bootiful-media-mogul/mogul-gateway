@@ -10,49 +10,48 @@ import org.springframework.security.oauth2.client.registration.ReactiveClientReg
 import org.springframework.security.oauth2.client.web.server.DefaultServerOAuth2AuthorizationRequestResolver;
 import org.springframework.security.oauth2.client.web.server.ServerOAuth2AuthorizationRequestResolver;
 import org.springframework.security.web.server.SecurityWebFilterChain;
+import org.springframework.security.web.server.authentication.RedirectServerAuthenticationEntryPoint;
 
 /**
- * a useful fix from <a href="https://github.com/okta/okta-spring-boot/issues/596">Matt
- * Raible</a>
+ * a useful fix from <a href="https://github.com/okta/okta-spring-boot/issues/596">Matt Raible</a>
  */
 @Configuration
 class SecurityConfiguration {
 
-	private final String audience;
+    private final ReactiveClientRegistrationRepository clientRegistrationRepository;
 
-	private final ReactiveClientRegistrationRepository clientRegistrationRepository;
+    SecurityConfiguration(ReactiveClientRegistrationRepository clientRegistrationRepository) {
+        this.clientRegistrationRepository = clientRegistrationRepository;
+    }
 
-	SecurityConfiguration(ReactiveClientRegistrationRepository clientRegistrationRepository,
-			@Value("${auth0.audience}") String audience) {
-		this.clientRegistrationRepository = clientRegistrationRepository;
-		this.audience = audience;
-	}
+    private ServerOAuth2AuthorizationRequestResolver authorizationRequestResolver(
+            String audience, ReactiveClientRegistrationRepository clientRegistrationRepository) {
+        var authorizationRequestResolver = new DefaultServerOAuth2AuthorizationRequestResolver(
+                clientRegistrationRepository);
+        authorizationRequestResolver.setAuthorizationRequestCustomizer(
+                customizer -> customizer.additionalParameters(params -> params.put("audience", audience)));
+        return authorizationRequestResolver;
+    }
 
-	@Bean
-	@SuppressWarnings("SpringJavaInjectionPointsAutowiringInspection")
-	SecurityWebFilterChain securityWebFilterChain(ServerHttpSecurity http) {
-		return http//
-			.authorizeExchange((authorize) -> authorize//
-				.matchers(EndpointRequest.toAnyEndpoint())
-				.permitAll()//
-				.anyExchange()
-				.authenticated()//
-			)//
-			.oauth2Login(oauth2 -> oauth2
-				.authorizationRequestResolver(this.authorizationRequestResolver(this.clientRegistrationRepository)))
-			.csrf(ServerHttpSecurity.CsrfSpec::disable)//
-			.oauth2Login(Customizer.withDefaults())//
-			.oauth2Client(Customizer.withDefaults())//
-			.build();
-	}
+    @Bean
+    SecurityWebFilterChain securityWebFilterChain(
+            @Value("${auth0.audience}") String audience,
+            ServerHttpSecurity http) {
+        return http//
+                .authorizeExchange((authorize) -> authorize//
+                        .matchers(EndpointRequest.toAnyEndpoint()).permitAll()//
+                        .pathMatchers("/login", "/wp").permitAll() //
+                        .anyExchange().authenticated()//
+                )//
+                .oauth2Login(oauth2 -> oauth2
+                        .authorizationRequestResolver(this.authorizationRequestResolver(audience, this.clientRegistrationRepository))
+                )
+                .exceptionHandling(a -> a.authenticationEntryPoint(
+                        new RedirectServerAuthenticationEntryPoint("/login")))
+                .csrf(ServerHttpSecurity.CsrfSpec::disable)//
+                .oauth2Client(Customizer.withDefaults())//
+                .build();
+    }
 
-	private ServerOAuth2AuthorizationRequestResolver authorizationRequestResolver(
-			ReactiveClientRegistrationRepository clientRegistrationRepository) {
-		var authorizationRequestResolver = new DefaultServerOAuth2AuthorizationRequestResolver(
-				clientRegistrationRepository);
-		authorizationRequestResolver.setAuthorizationRequestCustomizer(
-				customizer -> customizer.additionalParameters(params -> params.put("audience", audience)));
-		return authorizationRequestResolver;
-	}
 
 }

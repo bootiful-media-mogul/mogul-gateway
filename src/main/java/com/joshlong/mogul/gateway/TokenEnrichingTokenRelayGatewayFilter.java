@@ -10,6 +10,7 @@ import org.springframework.security.oauth2.core.AbstractOAuth2Token;
 import org.springframework.web.server.ServerWebExchange;
 import reactor.core.publisher.Mono;
 
+
 // todo does retrying the request in this filter fix things?
 class TokenEnrichingTokenRelayGatewayFilter implements GatewayFilter {
 
@@ -37,7 +38,6 @@ class TokenEnrichingTokenRelayGatewayFilter implements GatewayFilter {
 					return tokenMono
 						.map(token -> exchange.mutate().request(r -> r.headers(h -> h.setBearerAuth(token))).build())
 						.retry(3);
-
 				}
 				return Mono.empty();
 
