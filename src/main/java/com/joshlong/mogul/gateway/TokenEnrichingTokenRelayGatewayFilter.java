@@ -10,7 +10,6 @@ import org.springframework.security.oauth2.core.AbstractOAuth2Token;
 import org.springframework.web.server.ServerWebExchange;
 import reactor.core.publisher.Mono;
 
-
 // todo does retrying the request in this filter fix things?
 class TokenEnrichingTokenRelayGatewayFilter implements GatewayFilter {
 
