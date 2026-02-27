@@ -9,21 +9,17 @@ import reactor.core.publisher.Flux;
  */
 public class SettingsClient {
 
-	private final WebClient.Builder webClientBuilder;
-
-	private final String graphqlUrl;
+	private final HttpGraphQlClient graphQlClient;
 
 	public SettingsClient(WebClient.Builder webClientBuilder, String graphqlUrl) {
-		this.webClientBuilder = webClientBuilder;
-		this.graphqlUrl = graphqlUrl;
+		var webClient = webClientBuilder.baseUrl(graphqlUrl).build();
+		this.graphQlClient = HttpGraphQlClient.builder(webClient).build();
 	}
 
 	private HttpGraphQlClient authenticatedGraphQlClient(String bearerToken) {
-		// todo this can be factored out as an ExchangeFilterFunction on the WebClient
-		// itself
-		var webClient = webClientBuilder.defaultHeaders(h -> h.setBearerAuth(bearerToken)).baseUrl(graphqlUrl).build();
-
-		return HttpGraphQlClient.builder(webClient).build();
+		return this.graphQlClient.mutate()
+				.header("Authorization", "Bearer " + bearerToken)
+				.build();
 	}
 
 	public Flux<SettingsPage> getSettings(String bearerToken) {
@@ -41,7 +37,7 @@ public class SettingsClient {
 				}
 				""";
 
-		return authenticatedGraphQlClient(bearerToken) //
+		return this.authenticatedGraphQlClient(bearerToken) //
 			.document(query) //
 			.retrieve("settings") //
 			.toEntityList(SettingsPage.class) //

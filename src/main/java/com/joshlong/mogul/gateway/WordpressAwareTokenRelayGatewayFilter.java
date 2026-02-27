@@ -1,8 +1,6 @@
 package com.joshlong.mogul.gateway;
 
 import org.jspecify.annotations.NonNull;
-import org.slf4j.Logger;
-import org.slf4j.LoggerFactory;
 import org.springframework.cloud.gateway.filter.GatewayFilter;
 import org.springframework.cloud.gateway.filter.GatewayFilterChain;
 import org.springframework.security.oauth2.client.authentication.OAuth2AuthenticationToken;
@@ -18,8 +16,6 @@ class WordpressAwareTokenRelayGatewayFilter implements GatewayFilter {
 	private static final String CLIENT_REGISTRATION_ID = "wordpress";
 
 	private final ServerOAuth2AuthorizedClientRepository clientRepository;
-
-	private final Logger log = LoggerFactory.getLogger(getClass());
 
 	WordpressAwareTokenRelayGatewayFilter(ServerOAuth2AuthorizedClientRepository clientRepository) {
 		this.clientRepository = clientRepository;
