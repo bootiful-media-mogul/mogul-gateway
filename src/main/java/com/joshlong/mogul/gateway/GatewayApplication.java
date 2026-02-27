@@ -22,7 +22,6 @@ import org.springframework.web.reactive.function.server.RouterFunction;
 import org.springframework.web.reactive.function.server.ServerResponse;
 
 import java.net.URI;
-import java.net.URL;
 
 import static org.springframework.web.reactive.function.server.RouterFunctions.route;
 

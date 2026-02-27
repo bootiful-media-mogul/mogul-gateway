@@ -4,8 +4,6 @@ import org.springframework.graphql.client.HttpGraphQlClient;
 import org.springframework.web.reactive.function.client.WebClient;
 import reactor.core.publisher.Flux;
 
-import java.net.URL;
-
 /**
  * read settings from the mogul-service
  */
