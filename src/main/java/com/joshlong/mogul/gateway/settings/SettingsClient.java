@@ -17,9 +17,7 @@ public class SettingsClient {
 	}
 
 	private HttpGraphQlClient authenticatedGraphQlClient(String bearerToken) {
-		return this.graphQlClient.mutate()
-				.header("Authorization", "Bearer " + bearerToken)
-				.build();
+		return this.graphQlClient.mutate().header("Authorization", "Bearer " + bearerToken).build();
 	}
 
 	public Flux<SettingsPage> getSettings(String bearerToken) {
