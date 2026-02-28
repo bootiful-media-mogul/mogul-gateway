@@ -37,7 +37,6 @@ class TokenEnrichingTokenRelayGatewayFilter implements GatewayFilter {
 					return tokenMono
 						.map(token -> exchange.mutate().request(r -> r.headers(h -> h.setBearerAuth(token))).build())
 						.retry(3);
-
 				}
 				return Mono.empty();
 
