@@ -7,6 +7,7 @@ import com.joshlong.mogul.gateway.settings.SettingsPage;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.beans.factory.ObjectProvider;
+import org.springframework.context.event.EventListener;
 import org.springframework.core.env.Environment;
 import org.springframework.security.core.Authentication;
 import org.springframework.security.core.context.ReactiveSecurityContextHolder;
@@ -41,8 +42,6 @@ class MogulSettingsAwareReactiveClientRegistrationRepository implements Reactive
 	private final SettingsClient settings;
 
 	private final ClientRegistration auth0ClientRegistration;
-
-	private final boolean traceEnabled = this.log.isTraceEnabled();
 
 	private final Cache<String, ClientRegistration> clientRegistrationCache = Caffeine.newBuilder()
 		.expireAfterWrite(Duration.ofSeconds(30))
@@ -86,33 +85,46 @@ class MogulSettingsAwareReactiveClientRegistrationRepository implements Reactive
 			.flatMap(this::getClientRegistration);
 	}
 
-	private Mono<ClientRegistration> getClientRegistration(PrincipalTokenRegistrationId accessToken) {
-		var key = this.buildValidCacheKey(accessToken);
+	@EventListener
+	void invalidateMogulSettingsCache(MogulSettingsCacheInvalidationEvent settingsCacheInvalidationEvent)
+			throws Exception {
+		var cacheKey = this.buildValidCacheKey(settingsCacheInvalidationEvent.authenticationName());
+		this.log.debug("invalidating cache for {}", cacheKey);
+		this.clientRegistrationCache.invalidate(cacheKey);
+	}
+
+	private Mono<ClientRegistration> getClientRegistration(PrincipalTokenRegistrationId principalTokenRegistrationId) {
+		var key = this.buildValidCacheKey(principalTokenRegistrationId);
 		var cached = this.clientRegistrationCache.getIfPresent(key);
 		if (cached != null) {
-			if (this.traceEnabled) {
-				this.log.trace("found cached client registration for {}: {}", key, cached.getRegistrationId());
-			}
+			this.log.debug("found cached client registration for {}: {}", key, cached.getRegistrationId());
 			return Mono.just(cached);
 		}
-		if (this.traceEnabled) {
-			this.log.trace("no cached client registration for {}. loading from settings.", key);
-		}
-		return this.settings.getSettings(accessToken.accessToken())
-			.filter(sp -> sp.category().equals(WORDPRESS_CONSTANT))
-			.singleOrEmpty()
-			.flatMap(this::registerWordpressClient)
-			.doOnNext(cr -> this.clientRegistrationCache.put(key, cr));
+		this.log.debug("no cached client registration for {}. loading from settings.", key);
+		return this.settings //
+			.getSettings(principalTokenRegistrationId.accessToken()) //
+			.filter(sp -> sp.category().equals(WORDPRESS_CONSTANT)) //
+			.singleOrEmpty()//
+			.flatMap(this::registerWordpressClient) //
+			.doOnNext(cr -> this.writeToCache(cr, key)); //
 	}
 
-	private String buildValidCacheKey(PrincipalTokenRegistrationId token) {
-		return this.buildValidCacheKey(token.authentication(), token.registrationId());
+	private void writeToCache(ClientRegistration cr, String key) {
+		this.log.info("writing {} to cache with key {}", cr.getClientId(), key);
+		this.clientRegistrationCache.put(key, cr);
 	}
 
-	private String buildValidCacheKey(Authentication authentication, String registrationId) {
-		Assert.notNull(authentication, "authentication cannot be null");
-		Assert.hasText(registrationId, "registrationId cannot be null");
-		return registrationId + "|" + authentication.getName();
+	private String buildValidCacheKey(PrincipalTokenRegistrationId principalTokenRegistrationId) {
+		return this.buildValidCacheKey(principalTokenRegistrationId.authentication());
+	}
+
+	private String buildValidCacheKey(String auth) {
+		Assert.notNull(auth, "authentication cannot be null");
+		return auth;
+	}
+
+	private String buildValidCacheKey(Authentication authentication) {
+		return this.buildValidCacheKey(authentication.getName());
 	}
 
 	/**
@@ -127,10 +139,7 @@ class MogulSettingsAwareReactiveClientRegistrationRepository implements Reactive
 		var good = StringUtils.hasText(clientId) && StringUtils.hasText(clientSecret)
 				&& StringUtils.hasText(authorizationUri) && StringUtils.hasText(tokenUri);
 		if (!good) {
-			if (this.traceEnabled) {
-				var msg = "missing required settings for [" + WORDPRESS_CONSTANT + "] client registration";
-				this.log.trace(msg);
-			}
+			this.log.trace("missing required settings for [" + WORDPRESS_CONSTANT + "] client registration");
 			return Mono.empty();
 		}
 		return Mono.just(ClientRegistration.withRegistrationId(WORDPRESS_CONSTANT)//
