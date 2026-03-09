@@ -88,7 +88,7 @@ class MogulSettingsAwareReactiveClientRegistrationRepository implements Reactive
 	@EventListener
 	void invalidateMogulSettingsCache(String authenticationName) {
 		var cacheKey = this.buildValidCacheKey(authenticationName);
-		this.log.debug("invalidating cache for {}", cacheKey);
+		this.log.info("invalidating cache for {}", cacheKey);
 		this.clientRegistrationCache.invalidate(cacheKey);
 	}
 
@@ -96,10 +96,11 @@ class MogulSettingsAwareReactiveClientRegistrationRepository implements Reactive
 		var key = this.buildValidCacheKey(principalTokenRegistrationId);
 		var cached = this.clientRegistrationCache.getIfPresent(key);
 		if (cached != null) {
-			this.log.debug("found cached client registration for {}: {}", key, cached.getRegistrationId());
+			this.log.trace("found cached client registration for {}: {}", key, cached.getRegistrationId());
+
 			return Mono.just(cached);
 		}
-		this.log.debug("no cached client registration for {}. loading from settings.", key);
+		this.log.info("no cached client registration for {}. loading from settings.", key);
 		return this.settings //
 			.getSettings(principalTokenRegistrationId.accessToken()) //
 			.filter(sp -> sp.category().equals(WORDPRESS_CONSTANT)) //
@@ -157,7 +158,7 @@ class MogulSettingsAwareReactiveClientRegistrationRepository implements Reactive
 	private ClientRegistration registerAuth0Client(Environment environment) {
 		var name = "auth0";
 		return ClientRegistrations
-			.fromOidcIssuerLocation(Objects.requireNonNull(environment.getProperty("auth0.domain")))
+			.fromOidcIssuerLocation(Objects.requireNonNull(environment.getProperty("AUTH0_DOMAIN")))
 			.registrationId(name)
 			.clientId(environment.getProperty("AUTH0_CLIENT_ID"))
 			.clientSecret(environment.getProperty("AUTH0_CLIENT_SECRET"))

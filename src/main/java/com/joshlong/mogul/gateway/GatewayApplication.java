@@ -8,10 +8,12 @@ import org.springframework.beans.factory.annotation.Value;
 import org.springframework.boot.SpringApplication;
 import org.springframework.boot.autoconfigure.SpringBootApplication;
 import org.springframework.boot.context.properties.EnableConfigurationProperties;
+import org.springframework.boot.task.SimpleAsyncTaskSchedulerBuilder;
 import org.springframework.cloud.gateway.route.RouteLocator;
 import org.springframework.cloud.gateway.route.builder.RouteLocatorBuilder;
 import org.springframework.context.annotation.Bean;
 import org.springframework.core.env.Environment;
+import org.springframework.scheduling.TaskScheduler;
 import org.springframework.security.oauth2.client.InMemoryReactiveOAuth2AuthorizedClientService;
 import org.springframework.security.oauth2.client.ReactiveOAuth2AuthorizedClientManager;
 import org.springframework.security.oauth2.client.ReactiveOAuth2AuthorizedClientService;
@@ -46,7 +48,12 @@ public class GatewayApplication {
 		return new InMemoryReactiveOAuth2AuthorizedClientService(clientRegistrationRepository);
 	}
 
-	// do i need the preceeding?
+	@Bean
+	TaskScheduler taskScheduler() {
+		return new SimpleAsyncTaskSchedulerBuilder()//
+			.virtualThreads(true) //
+			.build();
+	}
 
 	@Bean
 	MogulSettingsAwareReactiveClientRegistrationRepository mogulSettingsAwareReactiveClientRegistrationRepository(
