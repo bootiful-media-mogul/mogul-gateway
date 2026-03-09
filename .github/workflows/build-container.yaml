@@ -2,7 +2,7 @@ name: Deploy
 
 env:
 
-  GCLOUD_SA_KEY:  ${{ secrets.GCLOUD_SA_KEY }}
+  GCLOUD_SA_KEY: ${{ secrets.GCLOUD_SA_KEY }}
   GCLOUD_PROJECT: joshlong
   GH_PAT: ${{ secrets.MOGUL_GITHUB_PERSONAL_ACCESS_TOKEN }}
 
@@ -46,7 +46,7 @@ jobs:
           docker push $IMAGE_NAME
 
       - name: Invoke Pipeline
-        run : |
+        run: |
           curl -H "Accept: application/vnd.github.everest-preview+json" -H "Authorization: token ${GH_PAT}" --request POST  --data '{"event_type": "update-event"}' https://api.github.com/repos/bootiful-media-mogul/pipeline/dispatches
           echo "Invoking the pipeline to have it deploy everything..."
 

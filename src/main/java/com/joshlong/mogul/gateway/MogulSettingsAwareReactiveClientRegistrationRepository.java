@@ -7,6 +7,7 @@ import com.joshlong.mogul.gateway.settings.SettingsPage;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.beans.factory.ObjectProvider;
+import org.springframework.context.event.EventListener;
 import org.springframework.core.env.Environment;
 import org.springframework.security.core.Authentication;
 import org.springframework.security.core.context.ReactiveSecurityContextHolder;
@@ -42,11 +43,9 @@ class MogulSettingsAwareReactiveClientRegistrationRepository implements Reactive
 
 	private final ClientRegistration auth0ClientRegistration;
 
-	private final boolean traceEnabled = this.log.isTraceEnabled();
-
 	private final Cache<String, ClientRegistration> clientRegistrationCache = Caffeine.newBuilder()
-		.expireAfterWrite(Duration.ofSeconds(30))
-		.maximumSize(10_000)
+		.expireAfterWrite(Duration.ofMinutes(5)) // todo confirm token timeout
+			 .maximumSize(10_000)
 		.build();
 
 	MogulSettingsAwareReactiveClientRegistrationRepository(ObjectProvider<CurrentToken> token, Environment environment,
@@ -86,33 +85,46 @@ class MogulSettingsAwareReactiveClientRegistrationRepository implements Reactive
 			.flatMap(this::getClientRegistration);
 	}
 
-	private Mono<ClientRegistration> getClientRegistration(PrincipalTokenRegistrationId accessToken) {
-		var key = this.buildValidCacheKey(accessToken);
+	@EventListener
+	void invalidateMogulSettingsCache(String authenticationName) {
+		var cacheKey = this.buildValidCacheKey(authenticationName);
+		this.log.info("invalidating cache for {}", cacheKey);
+		this.clientRegistrationCache.invalidate(cacheKey);
+	}
+
+	private Mono<ClientRegistration> getClientRegistration(PrincipalTokenRegistrationId principalTokenRegistrationId) {
+		var key = this.buildValidCacheKey(principalTokenRegistrationId);
 		var cached = this.clientRegistrationCache.getIfPresent(key);
 		if (cached != null) {
-			if (this.traceEnabled) {
-				this.log.trace("found cached client registration for {}: {}", key, cached.getRegistrationId());
-			}
+			this.log.trace("found cached client registration for {}: {}", key, cached.getRegistrationId());
+
 			return Mono.just(cached);
 		}
-		if (this.traceEnabled) {
-			this.log.trace("no cached client registration for {}. loading from settings.", key);
-		}
-		return this.settings.getSettings(accessToken.accessToken())
-			.filter(sp -> sp.category().equals(WORDPRESS_CONSTANT))
-			.singleOrEmpty()
-			.flatMap(this::registerWordpressClient)
-			.doOnNext(cr -> this.clientRegistrationCache.put(key, cr));
+		this.log.info("no cached client registration for {}. loading from settings.", key);
+		return this.settings //
+			.getSettings(principalTokenRegistrationId.accessToken()) //
+			.filter(sp -> sp.category().equals(WORDPRESS_CONSTANT)) //
+			.singleOrEmpty()//
+			.flatMap(this::registerWordpressClient) //
+			.doOnNext(cr -> this.writeToCache(cr, key)); //
 	}
 
-	private String buildValidCacheKey(PrincipalTokenRegistrationId token) {
-		return this.buildValidCacheKey(token.authentication(), token.registrationId());
+	private void writeToCache(ClientRegistration cr, String key) {
+		this.log.info("writing {} to cache with key {}", cr.getClientId(), key);
+		this.clientRegistrationCache.put(key, cr);
 	}
 
-	private String buildValidCacheKey(Authentication authentication, String registrationId) {
-		Assert.notNull(authentication, "authentication cannot be null");
-		Assert.hasText(registrationId, "registrationId cannot be null");
-		return registrationId + "|" + authentication.getName();
+	private String buildValidCacheKey(PrincipalTokenRegistrationId principalTokenRegistrationId) {
+		return this.buildValidCacheKey(principalTokenRegistrationId.authentication());
+	}
+
+	private String buildValidCacheKey(String auth) {
+		Assert.notNull(auth, "authentication cannot be null");
+		return auth;
+	}
+
+	private String buildValidCacheKey(Authentication authentication) {
+		return this.buildValidCacheKey(authentication.getName());
 	}
 
 	/**
@@ -127,10 +139,7 @@ class MogulSettingsAwareReactiveClientRegistrationRepository implements Reactive
 		var good = StringUtils.hasText(clientId) && StringUtils.hasText(clientSecret)
 				&& StringUtils.hasText(authorizationUri) && StringUtils.hasText(tokenUri);
 		if (!good) {
-			if (this.traceEnabled) {
-				var msg = "missing required settings for [" + WORDPRESS_CONSTANT + "] client registration";
-				this.log.trace(msg);
-			}
+			this.log.trace("missing required settings for [" + WORDPRESS_CONSTANT + "] client registration");
 			return Mono.empty();
 		}
 		return Mono.just(ClientRegistration.withRegistrationId(WORDPRESS_CONSTANT)//
@@ -149,7 +158,7 @@ class MogulSettingsAwareReactiveClientRegistrationRepository implements Reactive
 	private ClientRegistration registerAuth0Client(Environment environment) {
 		var name = "auth0";
 		return ClientRegistrations
-			.fromOidcIssuerLocation(Objects.requireNonNull(environment.getProperty("auth0.domain")))
+			.fromOidcIssuerLocation(Objects.requireNonNull(environment.getProperty("AUTH0_DOMAIN")))
 			.registrationId(name)
 			.clientId(environment.getProperty("AUTH0_CLIENT_ID"))
 			.clientSecret(environment.getProperty("AUTH0_CLIENT_SECRET"))
