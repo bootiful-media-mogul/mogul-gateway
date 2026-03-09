@@ -86,9 +86,8 @@ class MogulSettingsAwareReactiveClientRegistrationRepository implements Reactive
 	}
 
 	@EventListener
-	void invalidateMogulSettingsCache(MogulSettingsCacheInvalidationEvent settingsCacheInvalidationEvent)
-			throws Exception {
-		var cacheKey = this.buildValidCacheKey(settingsCacheInvalidationEvent.authenticationName());
+	void invalidateMogulSettingsCache(String authenticationName) {
+		var cacheKey = this.buildValidCacheKey(authenticationName);
 		this.log.debug("invalidating cache for {}", cacheKey);
 		this.clientRegistrationCache.invalidate(cacheKey);
 	}
