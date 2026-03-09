@@ -45,7 +45,7 @@ class MogulSettingsAwareReactiveClientRegistrationRepository implements Reactive
 
 	private final Cache<String, ClientRegistration> clientRegistrationCache = Caffeine.newBuilder()
 		.expireAfterWrite(Duration.ofMinutes(5)) // todo confirm token timeout
-			 .maximumSize(10_000)
+		.maximumSize(10_000)
 		.build();
 
 	MogulSettingsAwareReactiveClientRegistrationRepository(ObjectProvider<CurrentToken> token, Environment environment,
