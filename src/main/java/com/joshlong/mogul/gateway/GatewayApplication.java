@@ -1,8 +1,6 @@
 package com.joshlong.mogul.gateway;
 
 import com.joshlong.mogul.gateway.settings.SettingsClient;
-import org.slf4j.Logger;
-import org.slf4j.LoggerFactory;
 import org.springframework.beans.factory.ObjectProvider;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.boot.SpringApplication;
@@ -13,7 +11,7 @@ import org.springframework.cloud.gateway.route.RouteLocator;
 import org.springframework.cloud.gateway.route.builder.RouteLocatorBuilder;
 import org.springframework.context.annotation.Bean;
 import org.springframework.core.env.Environment;
-import org.springframework.scheduling.TaskScheduler;
+import org.springframework.scheduling.concurrent.SimpleAsyncTaskScheduler;
 import org.springframework.security.oauth2.client.InMemoryReactiveOAuth2AuthorizedClientService;
 import org.springframework.security.oauth2.client.ReactiveOAuth2AuthorizedClientManager;
 import org.springframework.security.oauth2.client.ReactiveOAuth2AuthorizedClientService;
@@ -35,9 +33,7 @@ public class GatewayApplication {
 
 	private static final String UI_PROPERTY_NAME = "${mogul.gateway.ui}";
 
-	private final Logger log = LoggerFactory.getLogger(getClass());
-
-	public static void main(String[] args) {
+	static void main(String[] args) {
 		SpringApplication.run(GatewayApplication.class, args);
 	}
 
@@ -49,7 +45,7 @@ public class GatewayApplication {
 	}
 
 	@Bean
-	TaskScheduler taskScheduler() {
+	SimpleAsyncTaskScheduler taskScheduler() {
 		return new SimpleAsyncTaskSchedulerBuilder()//
 			.virtualThreads(true) //
 			.build();
