@@ -7,6 +7,7 @@ import org.springframework.boot.SpringApplication;
 import org.springframework.boot.autoconfigure.SpringBootApplication;
 import org.springframework.boot.context.properties.EnableConfigurationProperties;
 import org.springframework.boot.task.SimpleAsyncTaskSchedulerBuilder;
+import org.springframework.cloud.gateway.filter.GlobalFilter;
 import org.springframework.cloud.gateway.route.RouteLocator;
 import org.springframework.cloud.gateway.route.builder.RouteLocatorBuilder;
 import org.springframework.context.annotation.Bean;
@@ -33,8 +34,26 @@ public class GatewayApplication {
 
 	private static final String UI_PROPERTY_NAME = "${mogul.gateway.ui}";
 
+	// must match PublicationService.BASE_URL_HEADER in mogul-service
+	private static final String BASE_URL_HEADER = "X-Mogul-Base-Url";
+
 	static void main(String[] args) {
 		SpringApplication.run(GatewayApplication.class, args);
+	}
+
+	/**
+	 * stamp the caller's absolute base URL (scheme + host[:port]) onto every proxied
+	 * request so the backend can build absolute links back into the app (e.g. to a newly
+	 * created blog post) without hard-coding a host.
+	 */
+	@Bean
+	GlobalFilter baseUrlHeaderGlobalFilter() {
+		return (exchange, chain) -> {
+			var uri = exchange.getRequest().getURI();
+			var baseUrl = uri.getScheme() + "://" + uri.getAuthority();
+			var request = exchange.getRequest().mutate().header(BASE_URL_HEADER, baseUrl).build();
+			return chain.filter(exchange.mutate().request(request).build());
+		};
 	}
 
 	// do i need the following?
