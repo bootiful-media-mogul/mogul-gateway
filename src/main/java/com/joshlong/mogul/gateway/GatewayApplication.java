@@ -34,7 +34,6 @@ public class GatewayApplication {
 
 	private static final String UI_PROPERTY_NAME = "${mogul.gateway.ui}";
 
-	// must match PublicationService.BASE_URL_HEADER in mogul-service
 	private static final String BASE_URL_HEADER = "X-Mogul-Base-Url";
 
 	static void main(String[] args) {
@@ -56,7 +55,7 @@ public class GatewayApplication {
 		};
 	}
 
-	// do i need the following?
+	// todo: do i need the following?
 	@Bean
 	ReactiveOAuth2AuthorizedClientService authorizedClientService(
 			ReactiveClientRegistrationRepository clientRegistrationRepository) {
