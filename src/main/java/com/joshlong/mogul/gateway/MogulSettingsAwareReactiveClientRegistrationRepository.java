@@ -88,7 +88,6 @@ class MogulSettingsAwareReactiveClientRegistrationRepository implements Reactive
 	@EventListener
 	void invalidateMogulSettingsCache(String authenticationName) {
 		var cacheKey = this.buildValidCacheKey(authenticationName);
-		this.log.info("invalidating cache for {}", cacheKey);
 		this.clientRegistrationCache.invalidate(cacheKey);
 	}
 
@@ -96,11 +95,8 @@ class MogulSettingsAwareReactiveClientRegistrationRepository implements Reactive
 		var key = this.buildValidCacheKey(principalTokenRegistrationId);
 		var cached = this.clientRegistrationCache.getIfPresent(key);
 		if (cached != null) {
-			this.log.trace("found cached client registration for {}: {}", key, cached.getRegistrationId());
-
 			return Mono.just(cached);
 		}
-		this.log.info("no cached client registration for {}. loading from settings.", key);
 		return this.settings //
 			.getSettings(principalTokenRegistrationId.accessToken()) //
 			.filter(sp -> sp.category().equals(WORDPRESS_CONSTANT)) //
@@ -110,7 +106,6 @@ class MogulSettingsAwareReactiveClientRegistrationRepository implements Reactive
 	}
 
 	private void writeToCache(ClientRegistration cr, String key) {
-		this.log.info("writing {} to cache with key {}", cr.getClientId(), key);
 		this.clientRegistrationCache.put(key, cr);
 	}
 
