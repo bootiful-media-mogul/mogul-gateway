@@ -48,7 +48,7 @@ class SettingsWrittenInboundIntegrationFlowConfiguration {
 	 * messages nobody will ever read. the cost is that a change published during a
 	 * connection blip is missed by that instance, which leaves it serving a stale
 	 * registration until the five-minute expiry in
-	 * {@link MogulSettingsAwareReactiveClientRegistrationRepository} catches it.
+	 * {@link MogulSettingsAwareClientRegistrationRepository} catches it.
 	 */
 	@Bean
 	Queue settingsEventsQueue() {
@@ -62,7 +62,7 @@ class SettingsWrittenInboundIntegrationFlowConfiguration {
 
 	@Bean
 	IntegrationFlow settingsWrittenInboundIntegrationFlow(
-			MogulSettingsAwareReactiveClientRegistrationRepository registrationRepository, ObjectMapper objectMapper,
+			MogulSettingsAwareClientRegistrationRepository registrationRepository, ObjectMapper objectMapper,
 			ConnectionFactory connectionFactory, Queue settingsEventsQueue) {
 		return IntegrationFlow //
 			.from(Amqp.inboundAdapter(connectionFactory, settingsEventsQueue)) //
