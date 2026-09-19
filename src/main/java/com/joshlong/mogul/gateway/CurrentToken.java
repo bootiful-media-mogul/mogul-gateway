@@ -1,10 +1,9 @@
 package com.joshlong.mogul.gateway;
 
-import org.jspecify.annotations.NonNull;
-import org.springframework.security.oauth2.client.ReactiveOAuth2AuthorizedClientService;
+import org.jspecify.annotations.Nullable;
+import org.springframework.security.oauth2.client.OAuth2AuthorizedClientService;
 import org.springframework.security.oauth2.client.authentication.OAuth2AuthenticationToken;
 import org.springframework.stereotype.Component;
-import reactor.core.publisher.Mono;
 
 /**
  * use to obtain the current access token for the current authenticated
@@ -13,17 +12,17 @@ import reactor.core.publisher.Mono;
 @Component
 class CurrentToken {
 
-	private final ReactiveOAuth2AuthorizedClientService authorizedClientService;
+	private final OAuth2AuthorizedClientService authorizedClientService;
 
-	CurrentToken(ReactiveOAuth2AuthorizedClientService authorizedClientService) {
+	CurrentToken(OAuth2AuthorizedClientService authorizedClientService) {
 		this.authorizedClientService = authorizedClientService;
 	}
 
-	@NonNull
-	Mono<String> getAccessToken(OAuth2AuthenticationToken authentication) {
-		return this.authorizedClientService //
-			.loadAuthorizedClient(authentication.getAuthorizedClientRegistrationId(), authentication.getName()) //
-			.map(client -> client.getAccessToken().getTokenValue());
+	@Nullable
+	String getAccessToken(OAuth2AuthenticationToken authentication) {
+		var client = this.authorizedClientService //
+			.loadAuthorizedClient(authentication.getAuthorizedClientRegistrationId(), authentication.getName());
+		return client == null ? null : client.getAccessToken().getTokenValue();
 	}
 
 }

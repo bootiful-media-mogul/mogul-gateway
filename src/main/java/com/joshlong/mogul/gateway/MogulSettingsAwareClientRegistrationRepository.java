@@ -4,34 +4,32 @@ import com.github.benmanes.caffeine.cache.Cache;
 import com.github.benmanes.caffeine.cache.Caffeine;
 import com.joshlong.mogul.gateway.settings.SettingsClient;
 import com.joshlong.mogul.gateway.settings.SettingsPage;
+import org.jspecify.annotations.Nullable;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.beans.factory.ObjectProvider;
 import org.springframework.context.event.EventListener;
 import org.springframework.core.env.Environment;
+import org.springframework.security.authentication.AnonymousAuthenticationToken;
 import org.springframework.security.core.Authentication;
-import org.springframework.security.core.context.ReactiveSecurityContextHolder;
+import org.springframework.security.core.context.SecurityContextHolder;
 import org.springframework.security.oauth2.client.authentication.OAuth2AuthenticationToken;
 import org.springframework.security.oauth2.client.registration.ClientRegistration;
+import org.springframework.security.oauth2.client.registration.ClientRegistrationRepository;
 import org.springframework.security.oauth2.client.registration.ClientRegistrations;
-import org.springframework.security.oauth2.client.registration.ReactiveClientRegistrationRepository;
 import org.springframework.security.oauth2.core.AuthorizationGrantType;
 import org.springframework.security.oauth2.core.ClientAuthenticationMethod;
 import org.springframework.util.Assert;
 import org.springframework.util.StringUtils;
-import reactor.core.publisher.Mono;
 
 import java.time.Duration;
 import java.util.Objects;
 
 /**
- * A reactive client registration repository that is aware of the tenant {@code settings}
- * table and can dynamically register secondary OAuth client registrations based on those
- * settings.
- *
- * @author Josh Long
+ * A client registration repository that is aware of the tenant {@code settings} table and
+ * can dynamically register secondary OAuth client registrations based on those settings.
  */
-class MogulSettingsAwareReactiveClientRegistrationRepository implements ReactiveClientRegistrationRepository {
+class MogulSettingsAwareClientRegistrationRepository implements ClientRegistrationRepository {
 
 	private static final String WORDPRESS_CONSTANT = "wordpress";
 
@@ -48,7 +46,7 @@ class MogulSettingsAwareReactiveClientRegistrationRepository implements Reactive
 		.maximumSize(10_000)
 		.build();
 
-	MogulSettingsAwareReactiveClientRegistrationRepository(ObjectProvider<CurrentToken> token, Environment environment,
+	MogulSettingsAwareClientRegistrationRepository(ObjectProvider<CurrentToken> token, Environment environment,
 			SettingsClient settings) {
 		Assert.notNull(token, "token cannot be null");
 		Assert.notNull(environment, "environment cannot be null");
@@ -59,30 +57,31 @@ class MogulSettingsAwareReactiveClientRegistrationRepository implements Reactive
 	}
 
 	@Override
-	public Mono<ClientRegistration> findByRegistrationId(String registrationId) {
+	public @Nullable ClientRegistration findByRegistrationId(String registrationId) {
 
 		// fast path.
-		if (registrationId.equals(auth0ClientRegistration.getRegistrationId())) {
-			return Mono.just(auth0ClientRegistration);
+		if (registrationId.equals(this.auth0ClientRegistration.getRegistrationId())) {
+			return this.auth0ClientRegistration;
 		}
 
-		// otherwise load settings
-		return ReactiveSecurityContextHolder //
-			.getContext() //
-			.flatMap(sc -> {
-				var auth = Objects.requireNonNull(sc.getAuthentication());
-				if (auth instanceof OAuth2AuthenticationToken auth2AuthenticationToken) {
-					var currentToken = this.token.getIfAvailable();
-					Assert.notNull(currentToken, "currentToken cannot be null");
-					return currentToken.getAccessToken(auth2AuthenticationToken)
-						.map(access -> new PrincipalTokenRegistrationId(auth2AuthenticationToken, access,
-								auth2AuthenticationToken.getAuthorizedClientRegistrationId()));
-				} //
-				return Mono.error(new IllegalStateException(String.format(
-						"no token available for authentication %s while attempting to look up secondary %s", auth,
-						ClientRegistration.class.getName())));
-			})//
-			.flatMap(this::getClientRegistration);
+		// otherwise load settings, which requires a caller we can get a token for
+		var authentication = SecurityContextHolder.getContext().getAuthentication();
+		if (authentication == null || authentication instanceof AnonymousAuthenticationToken) {
+			return null;
+		}
+		if (!(authentication instanceof OAuth2AuthenticationToken auth2AuthenticationToken)) {
+			throw new IllegalStateException(
+					String.format("no token available for authentication %s while attempting to look up secondary %s",
+							authentication, ClientRegistration.class.getName()));
+		}
+		var currentToken = this.token.getIfAvailable();
+		Assert.notNull(currentToken, "currentToken cannot be null");
+		var accessToken = currentToken.getAccessToken(auth2AuthenticationToken);
+		if (accessToken == null) {
+			return null;
+		}
+		return this.getClientRegistration(new PrincipalTokenRegistrationId(auth2AuthenticationToken, accessToken,
+				auth2AuthenticationToken.getAuthorizedClientRegistrationId()));
 	}
 
 	@EventListener
@@ -91,18 +90,23 @@ class MogulSettingsAwareReactiveClientRegistrationRepository implements Reactive
 		this.clientRegistrationCache.invalidate(cacheKey);
 	}
 
-	private Mono<ClientRegistration> getClientRegistration(PrincipalTokenRegistrationId principalTokenRegistrationId) {
+	private @Nullable ClientRegistration getClientRegistration(
+			PrincipalTokenRegistrationId principalTokenRegistrationId) {
 		var key = this.buildValidCacheKey(principalTokenRegistrationId);
 		var cached = this.clientRegistrationCache.getIfPresent(key);
 		if (cached != null) {
-			return Mono.just(cached);
+			return cached;
 		}
-		return this.settings //
-			.getSettings(principalTokenRegistrationId.accessToken()) //
-			.filter(sp -> sp.category().equals(WORDPRESS_CONSTANT)) //
-			.singleOrEmpty()//
-			.flatMap(this::registerWordpressClient) //
-			.doOnNext(cr -> this.writeToCache(cr, key)); //
+		for (var settingsPage : this.settings.getSettings(principalTokenRegistrationId.accessToken())) {
+			if (settingsPage.category().equals(WORDPRESS_CONSTANT)) {
+				var registration = this.registerWordpressClient(settingsPage);
+				if (registration != null) {
+					this.writeToCache(registration, key);
+				}
+				return registration;
+			}
+		}
+		return null;
 	}
 
 	private void writeToCache(ClientRegistration cr, String key) {
@@ -126,7 +130,7 @@ class MogulSettingsAwareReactiveClientRegistrationRepository implements Reactive
 	 * registers an OAuth client for WordPress, whose definition we can only derive from
 	 * the downstream {@code settings} table, accessed via the GraphQL settings API.
 	 */
-	private Mono<ClientRegistration> registerWordpressClient(SettingsPage settingsPage) {
+	private @Nullable ClientRegistration registerWordpressClient(SettingsPage settingsPage) {
 		var authorizationUri = this.getSettingsValueForKey(settingsPage, "authorizationUri");
 		var tokenUri = this.getSettingsValueForKey(settingsPage, "tokenUri");
 		var clientId = this.getSettingsValueForKey(settingsPage, "clientId");
@@ -135,9 +139,9 @@ class MogulSettingsAwareReactiveClientRegistrationRepository implements Reactive
 				&& StringUtils.hasText(authorizationUri) && StringUtils.hasText(tokenUri);
 		if (!good) {
 			this.log.trace("missing required settings for [" + WORDPRESS_CONSTANT + "] client registration");
-			return Mono.empty();
+			return null;
 		}
-		return Mono.just(ClientRegistration.withRegistrationId(WORDPRESS_CONSTANT)//
+		return ClientRegistration.withRegistrationId(WORDPRESS_CONSTANT)//
 			.clientId(clientId)//
 			.clientSecret(clientSecret)//
 			.clientAuthenticationMethod(ClientAuthenticationMethod.CLIENT_SECRET_POST)//
@@ -147,7 +151,7 @@ class MogulSettingsAwareReactiveClientRegistrationRepository implements Reactive
 			.authorizationUri(authorizationUri) //
 			.tokenUri(tokenUri) //
 			.clientName(WORDPRESS_CONSTANT) //
-			.build());
+			.build();
 	}
 
 	private ClientRegistration registerAuth0Client(Environment environment) {
@@ -165,7 +169,7 @@ class MogulSettingsAwareReactiveClientRegistrationRepository implements Reactive
 			.build();
 	}
 
-	private String getSettingsValueForKey(SettingsPage settingsPage, String k) {
+	private @Nullable String getSettingsValueForKey(SettingsPage settingsPage, String k) {
 		Assert.notNull(settingsPage, "the settingsPage must not be null");
 		Assert.notNull(k, "the key must not be null");
 		for (var setting : settingsPage.settings()) {

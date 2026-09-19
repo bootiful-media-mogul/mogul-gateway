@@ -7,24 +7,36 @@ import org.springframework.boot.SpringApplication;
 import org.springframework.boot.autoconfigure.SpringBootApplication;
 import org.springframework.boot.context.properties.EnableConfigurationProperties;
 import org.springframework.boot.task.SimpleAsyncTaskSchedulerBuilder;
-import org.springframework.cloud.gateway.filter.GlobalFilter;
-import org.springframework.cloud.gateway.route.RouteLocator;
-import org.springframework.cloud.gateway.route.builder.RouteLocatorBuilder;
 import org.springframework.context.annotation.Bean;
+import org.springframework.core.Ordered;
+import org.springframework.core.annotation.Order;
+import org.springframework.cloud.gateway.server.mvc.config.GatewayMvcProperties;
+import org.springframework.cloud.gateway.server.mvc.handler.ProxyExchange;
+import org.springframework.cloud.gateway.server.mvc.handler.RestClientProxyExchange;
 import org.springframework.core.env.Environment;
+import org.springframework.http.client.ClientHttpRequestFactory;
+import org.springframework.http.client.JdkClientHttpRequestFactory;
 import org.springframework.scheduling.concurrent.SimpleAsyncTaskScheduler;
-import org.springframework.security.oauth2.client.InMemoryReactiveOAuth2AuthorizedClientService;
-import org.springframework.security.oauth2.client.ReactiveOAuth2AuthorizedClientManager;
-import org.springframework.security.oauth2.client.ReactiveOAuth2AuthorizedClientService;
-import org.springframework.security.oauth2.client.registration.ReactiveClientRegistrationRepository;
-import org.springframework.security.oauth2.client.web.server.ServerOAuth2AuthorizedClientRepository;
-import org.springframework.web.reactive.function.client.WebClient;
-import org.springframework.web.reactive.function.server.RouterFunction;
-import org.springframework.web.reactive.function.server.ServerResponse;
+import org.springframework.security.oauth2.client.InMemoryOAuth2AuthorizedClientService;
+import org.springframework.security.oauth2.client.OAuth2AuthorizedClientManager;
+import org.springframework.security.oauth2.client.OAuth2AuthorizedClientService;
+import org.springframework.security.oauth2.client.registration.ClientRegistrationRepository;
+import org.springframework.security.oauth2.client.web.DefaultOAuth2AuthorizedClientManager;
+import org.springframework.security.oauth2.client.web.OAuth2AuthorizedClientRepository;
+import org.springframework.web.client.RestClient;
+import org.springframework.web.servlet.function.*;
 
 import java.net.URI;
+import java.net.http.HttpClient;
+import java.util.function.Function;
 
-import static org.springframework.web.reactive.function.server.RouterFunctions.route;
+import static org.springframework.cloud.gateway.server.mvc.filter.BeforeFilterFunctions.rewritePath;
+import static org.springframework.cloud.gateway.server.mvc.filter.BeforeFilterFunctions.uri;
+import static org.springframework.cloud.gateway.server.mvc.filter.RetryFilterFunctions.retry;
+import static org.springframework.cloud.gateway.server.mvc.filter.TokenRelayFilterFunctions.tokenRelay;
+import static org.springframework.cloud.gateway.server.mvc.handler.GatewayRouterFunctions.route;
+import static org.springframework.cloud.gateway.server.mvc.handler.HandlerFunctions.http;
+import static org.springframework.cloud.gateway.server.mvc.predicate.GatewayRequestPredicates.path;
 
 @SpringBootApplication
 @EnableConfigurationProperties(GatewayProperties.class)
@@ -36,7 +48,11 @@ public class GatewayApplication {
 
 	private static final String BASE_URL_HEADER = "X-Mogul-Base-Url";
 
-	static void main(String[] args) {
+	private static final String API_PREFIX = "/api/";
+
+	private static final int RETRIES = 5;
+
+	public static void main(String[] args) {
 		SpringApplication.run(GatewayApplication.class, args);
 	}
 
@@ -45,21 +61,56 @@ public class GatewayApplication {
 	 * request so the backend can build absolute links back into the app (e.g. to a newly
 	 * created blog post) without hard-coding a host.
 	 */
-	@Bean
-	GlobalFilter baseUrlHeaderGlobalFilter() {
-		return (exchange, chain) -> {
-			var uri = exchange.getRequest().getURI();
+	private static Function<ServerRequest, ServerRequest> baseUrlHeader() {
+		return request -> {
+			var uri = request.uri();
 			var baseUrl = uri.getScheme() + "://" + uri.getAuthority();
-			var request = exchange.getRequest().mutate().header(BASE_URL_HEADER, baseUrl).build();
-			return chain.filter(exchange.mutate().request(request).build());
+			return ServerRequest.from(request).header(BASE_URL_HEADER, baseUrl).build();
 		};
 	}
 
 	// todo: do i need the following?
 	@Bean
-	ReactiveOAuth2AuthorizedClientService authorizedClientService(
-			ReactiveClientRegistrationRepository clientRegistrationRepository) {
-		return new InMemoryReactiveOAuth2AuthorizedClientService(clientRegistrationRepository);
+	OAuth2AuthorizedClientService authorizedClientService(ClientRegistrationRepository clientRegistrationRepository) {
+		return new InMemoryOAuth2AuthorizedClientService(clientRegistrationRepository);
+	}
+
+	/**
+	 * the {@code tokenRelay()} filter function looks this up from the context to trade
+	 * the logged-in principal for a live access token. nothing auto-configures it.
+	 */
+	@Bean
+	OAuth2AuthorizedClientManager authorizedClientManager(ClientRegistrationRepository clientRegistrationRepository,
+			OAuth2AuthorizedClientRepository authorizedClientRepository) {
+		return new DefaultOAuth2AuthorizedClientManager(clientRegistrationRepository, authorizedClientRepository);
+	}
+
+	/**
+	 * the proxy talks to the UI and the API over cleartext http, and the JDK's
+	 * {@link HttpClient} defaults to {@link HttpClient.Version#HTTP_2}, which means it
+	 * opens every one of those requests with an h2c upgrade ({@code Connection: Upgrade},
+	 * {@code Upgrade: h2c}). the vite dev server registers an {@code upgrade} handler for
+	 * its HMR websocket and simply swallows an upgrade it doesn't recognize, so the
+	 * request never gets a response and the browser hangs forever with nothing in any
+	 * log. reactor netty never did this, so it is a webflux-to-mvc regression, not a vite
+	 * bug. pin the proxy to HTTP/1.1.
+	 */
+	@Bean
+	JdkClientHttpRequestFactory gatewayClientHttpRequestFactory() {
+		var httpClient = HttpClient.newBuilder() //
+			.version(HttpClient.Version.HTTP_1_1) //
+			.build();
+		return new JdkClientHttpRequestFactory(httpClient);
+	}
+
+	/**
+	 * wraps the stock proxy so valueless query parameters survive the hop to the backend;
+	 * see {@link RawQueryPreservingProxyExchange}.
+	 */
+	@Bean
+	ProxyExchange proxyExchange(RestClient.Builder restClientBuilder, GatewayMvcProperties gatewayMvcProperties) {
+		var restClientProxyExchange = new RestClientProxyExchange(restClientBuilder.build(), gatewayMvcProperties);
+		return new RawQueryPreservingProxyExchange(restClientProxyExchange);
 	}
 
 	@Bean
@@ -70,60 +121,61 @@ public class GatewayApplication {
 	}
 
 	@Bean
-	MogulSettingsAwareReactiveClientRegistrationRepository mogulSettingsAwareReactiveClientRegistrationRepository(
+	MogulSettingsAwareClientRegistrationRepository mogulSettingsAwareClientRegistrationRepository(
 			ObjectProvider<CurrentToken> token, SettingsClient settingsClient, Environment environment) {
-		return new MogulSettingsAwareReactiveClientRegistrationRepository(token, environment, settingsClient);
+		return new MogulSettingsAwareClientRegistrationRepository(token, environment, settingsClient);
 	}
 
 	@Bean
-	SettingsClient settingsClient(WebClient.Builder webClientBuilder, @Value(API_PROPERTY_NAME) String apiEndpointUrl) {
-		return new SettingsClient(webClientBuilder, apiEndpointUrl + "/graphql");
+	SettingsClient settingsClient(RestClient.Builder restClientBuilder,
+			@Value(API_PROPERTY_NAME) String apiEndpointUrl) {
+		return new SettingsClient(restClientBuilder, apiEndpointUrl + "/graphql");
 	}
 
 	@Bean
-	RouteLocator gateway(WordpressAwareTokenRelayGatewayFilter wordPressTokenRelayFilter, RouteLocatorBuilder rlb,
-			TokenEnrichingTokenRelayGatewayFilter tokenRelay, @Value(UI_PROPERTY_NAME) String ui,
+	@Order(Ordered.HIGHEST_PRECEDENCE)
+	RouterFunction<ServerResponse> apiRoute(WordpressAwareTokenRelayFilterFunction wordPressTokenRelayFilter,
 			@Value(API_PROPERTY_NAME) String api) {
-		var apiPrefix = "/api/";
-		var retries = 5;
-		return rlb//
-			.routes()
-			.route(rs -> rs //
-				.path(apiPrefix + "**") //
-				.filters(f -> f //
-					.retry(retries) //
-					.filter(tokenRelay)
-					.filter(wordPressTokenRelayFilter)
-					.rewritePath(apiPrefix + "(?<segment>.*)", "/$\\{segment}")//
-				)
-				.uri(api) //
-			)//
-			.route(rs -> rs//
-				.path("/**") //
-				.filters(f -> f.retry(retries).filter(tokenRelay)) //
-				.uri(ui) //
-			) //
+		return route("api") //
+			.route(path(API_PREFIX + "**"), http()) //
+			.filter(retry(RETRIES)) //
+			.filter(tokenRelay()) //
+			.filter(wordPressTokenRelayFilter) //
+			.before(baseUrlHeader()) //
+			.before(uri(api)) //
+			.before(rewritePath(API_PREFIX + "(?<segment>.*)", "/$\\{segment}")) //
+			.build();
+	}
+
+	/**
+	 * the catch-all: anything that isn't the API is the UI, so this has to be the last
+	 * {@link RouterFunction} the {@code DispatcherServlet} consults.
+	 */
+	@Bean
+	@Order(Ordered.LOWEST_PRECEDENCE)
+	RouterFunction<ServerResponse> uiRoute(@Value(UI_PROPERTY_NAME) String ui) {
+		return route("ui") //
+			.route(path("/**"), http()) //
+			.filter(retry(RETRIES)) //
+			.filter(tokenRelay()) //
+			.before(baseUrlHeader()) //
+			.before(uri(ui)) //
 			.build();
 	}
 
 	@Bean
-	WordpressAwareTokenRelayGatewayFilter wordpressAwareTokenRelayGatewayFilter(
-			ServerOAuth2AuthorizedClientRepository serverOAuth2AuthorizedClientRepository) {
-		return new WordpressAwareTokenRelayGatewayFilter(serverOAuth2AuthorizedClientRepository);
-	}
-
-	@Bean
-	TokenEnrichingTokenRelayGatewayFilter tokenEnrichingTokenRelayGatewayFilter(
-			ReactiveOAuth2AuthorizedClientManager clientManager) {
-		return new TokenEnrichingTokenRelayGatewayFilter(clientManager);
+	WordpressAwareTokenRelayFilterFunction wordpressAwareTokenRelayFilterFunction(
+			OAuth2AuthorizedClientRepository authorizedClientRepository) {
+		return new WordpressAwareTokenRelayFilterFunction(authorizedClientRepository);
 	}
 
 	// make sure there's only one login mechanism, no matter how many OAuth clients we
 	// register.
 	@Bean
+	@Order(0)
 	RouterFunction<ServerResponse> loginRoutes() {
 		var location = URI.create("/oauth2/authorization/auth0");
-		return route() //
+		return RouterFunctions.route() //
 			.GET("/login", _ -> ServerResponse.temporaryRedirect(location).build()) //
 			.build();
 	}
