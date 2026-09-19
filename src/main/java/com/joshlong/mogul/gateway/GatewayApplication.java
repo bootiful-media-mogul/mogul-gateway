@@ -96,7 +96,7 @@ public class GatewayApplication {
 	 * bug. pin the proxy to HTTP/1.1.
 	 */
 	@Bean
-	ClientHttpRequestFactory gatewayClientHttpRequestFactory() {
+	JdkClientHttpRequestFactory gatewayClientHttpRequestFactory() {
 		var httpClient = HttpClient.newBuilder() //
 			.version(HttpClient.Version.HTTP_1_1) //
 			.build();
