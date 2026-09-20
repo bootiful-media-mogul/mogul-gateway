@@ -156,17 +156,28 @@ class MogulSettingsAwareClientRegistrationRepository implements ClientRegistrati
 
 	private ClientRegistration registerAuth0Client(Environment environment) {
 		var name = "auth0";
-		return ClientRegistrations
-			.fromOidcIssuerLocation(Objects.requireNonNull(environment.getProperty("AUTH0_DOMAIN")))
+		return ClientRegistrations.fromOidcIssuerLocation(this.required(environment, "AUTH0_DOMAIN"))
 			.registrationId(name)
-			.clientId(environment.getProperty("AUTH0_CLIENT_ID"))
-			.clientSecret(environment.getProperty("AUTH0_CLIENT_SECRET"))
+			.clientId(this.required(environment, "AUTH0_CLIENT_ID"))
+			.clientSecret(this.required(environment, "AUTH0_CLIENT_SECRET"))
 			.clientAuthenticationMethod(ClientAuthenticationMethod.CLIENT_SECRET_BASIC)
 			.authorizationGrantType(AuthorizationGrantType.AUTHORIZATION_CODE)
 			.redirectUri("{baseUrl}/login/oauth2/code/{registrationId}")
 			.scope("profile", "openid", "email")
 			.clientName(name)
 			.build();
+	}
+
+	/**
+	 * these come from the environment, and a missing one used to surface as a bare
+	 * {@link NullPointerException} from deep inside bean creation, which says nothing
+	 * about which variable was not set.
+	 */
+	private String required(Environment environment, String property) {
+		var value = environment.getProperty(property);
+		Assert.hasText(value, () -> "the property [" + property
+				+ "] must be set; the gateway cannot register the auth0 client without it");
+		return Objects.requireNonNull(value);
 	}
 
 	private @Nullable String getSettingsValueForKey(SettingsPage settingsPage, String k) {
