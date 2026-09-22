@@ -4,7 +4,8 @@ env:
 
   GCLOUD_SA_KEY: ${{ secrets.GCLOUD_SA_KEY }}
   GCLOUD_PROJECT: joshlong
-  GH_PAT: ${{ secrets.MOGUL_GITHUB_PERSONAL_ACCESS_TOKEN }}
+  GH_TOKEN: ${{ secrets.MOGUL_GITHUB_PACKAGES_PERSONAL_ACCESS_TOKEN }}
+  GH_USER: ${{ github.actor }}
 
 on:
   push:
