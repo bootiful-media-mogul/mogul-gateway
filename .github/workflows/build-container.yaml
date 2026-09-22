@@ -5,6 +5,7 @@ env:
   GCLOUD_PROJECT: joshlong
   GH_TOKEN: ${{ secrets.MOGUL_GITHUB_PACKAGES_PERSONAL_ACCESS_TOKEN }}
   GH_USER: ${{ github.actor }}
+  APP_NAME: mogul-gateway
 
 on:
   push:
@@ -27,6 +28,6 @@ jobs:
       - uses: bootiful-media-mogul/github-actions-setup-container-build-env@main
         with:
           gh_token: ${{ env.GH_TOKEN }}
-          app_name: mogul-gateway
+          app_name: ${{ env.APP_NAME }}
           gcloud_sa_key: '${{ secrets.GCLOUD_SA_KEY }}'
           gcloud_project: ${{ env.GCLOUD_PROJECT }}
