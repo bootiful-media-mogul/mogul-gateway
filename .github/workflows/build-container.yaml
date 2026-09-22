@@ -5,7 +5,7 @@ env:
   GCLOUD_PROJECT: joshlong
   GH_TOKEN: ${{ secrets.MOGUL_GITHUB_PACKAGES_PERSONAL_ACCESS_TOKEN }}
   GH_USER: ${{ github.actor }}
-  APP_NAME: mogul-gateway
+  APP_NAME: gateway
 
 on:
   push:
